@@ -144,13 +144,3 @@ export function downloadSvg(container: HTMLElement, filename: string): void {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
-
-/** Build one stat tile's inner HTML. `delta` is measured minus requested, in display units. */
-export function statTile(label: string, value: string, unit: string, delta: string | null, tone: 'ok' | 'warn' | 'bad' | 'muted' = 'muted'): string {
-  const d = delta === null ? '' : `<div class="d ${tone === 'muted' ? '' : tone}">${delta}</div>`;
-  return `<div class="stat"><div class="k">${label}</div><div class="v">${value}<small>${unit}</small></div>${d}</div>`;
-}
-
-export function deltaTone(absDelta: number, okBelow: number, warnBelow: number): 'ok' | 'warn' | 'bad' {
-  return absDelta < okBelow ? 'ok' : absDelta < warnBelow ? 'warn' : 'bad';
-}

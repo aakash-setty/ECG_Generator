@@ -6,7 +6,7 @@ import { addNoise, NOISE_PRESETS } from '../core/noise.js';
 import { renderSvg, layoutFor, type Layout } from '../render/svg.js';
 import { TOXIDROMES, TOXIDROME_KEYS, applyToxidrome, type Toxidrome } from '../core/tox.js';
 import { toxMeasures, type ToxMeasures } from '../measure/tox-measures.js';
-import { $, setRoot, val, num, readCalibration, readRhythmLead, syncOutputs, Calipers, downloadSvg, statTile } from './common.js';
+import { $, setRoot, val, num, readCalibration, readRhythmLead, syncOutputs, Calipers, downloadSvg } from './common.js';
 
 let strip: Strip | null = null;
 let layout: Layout | null = null;
@@ -87,13 +87,7 @@ function update(): void {
     const v = m[c.measure] as number | null;
     return v !== null && (c.direction === 'above' ? v > c.threshold : v < c.threshold);
   }).length;
-  $<HTMLDivElement>('stats').innerHTML = [
-    statTile('Features present', `${present}`, `of ${spec.checklist.length}`, 'from the checklist below', present > 0 ? 'ok' : 'muted'),
-    statTile('Ventricular rate', m.hr === null ? 'n/a' : m.hr.toFixed(0), 'bpm', m.sinusHr !== null && m.hr !== null && Math.abs(m.sinusHr - m.hr) > 1 ? `conducted beats ${m.sinusHr.toFixed(0)} bpm` : null),
-    statTile('PR', m.pr === null ? 'n/a' : (m.pr * 1000).toFixed(0), 'ms', m.blockedPCount ? `${m.blockedPCount} non-conducted P` : null, m.blockedPCount ? 'warn' : 'muted'),
-    statTile('QRS', m.qrs === null ? 'n/a' : (m.qrs * 1000).toFixed(0), 'ms', null),
-    statTile('QTc (Bazett)', m.qtc === null ? 'n/a' : (m.qtc * 1000).toFixed(0), 'ms', m.qtcFridericia === null ? null : `Fridericia ${(m.qtcFridericia * 1000).toFixed(0)} ms`),
-  ].join('');
+  $<HTMLElement>('check-count').textContent = `${present} of ${spec.checklist.length} present`;
 
   const rows = spec.checklist.map((c) => {
     const v = m[c.measure] as number | null;

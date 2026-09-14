@@ -4,7 +4,7 @@
   --bg: #eef1f4;
   --surface: #ffffff;
   --surface-2: #f6f8fa;
-  --ink: #16181d;
+  --ink: #0b0c0f;
   --ink-2: #4b5563;
   --muted: #6b7280;
   --line: #e3e7ec;
@@ -88,7 +88,7 @@ button, select, input, output { font: inherit; }
 .card > .card-head, .card > details > summary {
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
   padding: 10px 14px;
-  font-size: 0.84rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink);
+  font-size: 0.86rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #000;
   border-bottom: 1px solid var(--line);
 }
 .card > details > summary { cursor: pointer; list-style: none; user-select: none; }
@@ -108,12 +108,12 @@ button, select, input, output { font: inherit; }
   padding: 5px 0;
 }
 .row.no-value { grid-template-columns: minmax(96px, 42%) minmax(0, 1fr); }
-.row label { color: var(--ink); font-size: 0.95rem; font-weight: 500; line-height: 1.25; }
-.row output { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.95rem; font-weight: 500; color: var(--ink); }
+.row label { color: #000; font-size: 0.97rem; font-weight: 600; line-height: 1.25; }
+.row output { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.97rem; font-weight: 600; color: #000; }
 .row select {
   width: 100%; min-width: 0;
   padding: 6px 28px 6px 10px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236b7280' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 10px center;
-  appearance: none; -webkit-appearance: none; color: var(--ink);
+  appearance: none; -webkit-appearance: none; color: #000; font-weight: 500;
 }
 .row select:focus, .row input:focus-visible, button:focus-visible { outline: 2px solid rgba(15,110,140,0.35); outline-offset: 1px; }
 .hidden { display: none !important; }
@@ -164,15 +164,6 @@ input[type=range]:disabled { opacity: 0.55; }
 .paper-foot .caliper b { color: var(--accent); }
 
 /* Stat tiles */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
-.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 10px 12px; min-width: 0; }
-.stat .k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
-.stat .v { font-size: 1.35rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: 2px; }
-.stat .v small { font-size: 0.75rem; color: var(--muted); font-weight: 500; margin-left: 3px; }
-.stat .d { font-size: 0.76rem; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
-.stat .d.ok { color: var(--ok); }
-.stat .d.warn { color: var(--warn); }
-.stat .d.bad { color: var(--bad); }
 
 /* Tables */
 table.data { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: 0.88rem; }
@@ -204,13 +195,13 @@ table.morph input { width: 58px; padding: 3px 4px; border: 1px solid var(--line-
 ul.list { margin: 4px 0 6px 18px; padding: 0; }
 ul.list li { margin: 3px 0; }
 dl.kv { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 0.86rem; }
-dl.kv dt { color: var(--ink-2); font-weight: 500; }
+dl.kv dt { color: #000; font-weight: 600; }
 dl.kv dd { margin: 0; font-variant-numeric: tabular-nums; }
 .stage { display: inline-block; margin-top: 6px; padding: 4px 10px; border-radius: 8px; background: var(--accent-2); color: var(--accent); font-weight: 600; font-size: 0.82rem; }
 
 /* Print */
 @media print {
-  .appbar, .sidebar, .stats, .below, .ecg-toolbar, .paper-foot { display: none !important; }
+  .appbar, .sidebar, .below, .ecg-toolbar, .paper-foot { display: none !important; }
   body { background: #fff; }
   .layout { display: block; padding: 0; }
   .card, .ecg-card { border: none; box-shadow: none; margin: 0; }

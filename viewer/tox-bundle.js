@@ -1571,10 +1571,6 @@
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1e3);
   }
-  function statTile(label, value, unit, delta, tone = "muted") {
-    const d = delta === null ? "" : `<div class="d ${tone === "muted" ? "" : tone}">${delta}</div>`;
-    return `<div class="stat"><div class="k">${label}</div><div class="v">${value}<small>${unit}</small></div>${d}</div>`;
-  }
 
   // src/viewer/tox.ts
   var strip = null;
@@ -1650,13 +1646,7 @@
       const v = m[c.measure];
       return v !== null && (c.direction === "above" ? v > c.threshold : v < c.threshold);
     }).length;
-    $("stats").innerHTML = [
-      statTile("Features present", `${present}`, `of ${spec.checklist.length}`, "from the checklist below", present > 0 ? "ok" : "muted"),
-      statTile("Ventricular rate", m.hr === null ? "n/a" : m.hr.toFixed(0), "bpm", m.sinusHr !== null && m.hr !== null && Math.abs(m.sinusHr - m.hr) > 1 ? `conducted beats ${m.sinusHr.toFixed(0)} bpm` : null),
-      statTile("PR", m.pr === null ? "n/a" : (m.pr * 1e3).toFixed(0), "ms", m.blockedPCount ? `${m.blockedPCount} non-conducted P` : null, m.blockedPCount ? "warn" : "muted"),
-      statTile("QRS", m.qrs === null ? "n/a" : (m.qrs * 1e3).toFixed(0), "ms", null),
-      statTile("QTc (Bazett)", m.qtc === null ? "n/a" : (m.qtc * 1e3).toFixed(0), "ms", m.qtcFridericia === null ? null : `Fridericia ${(m.qtcFridericia * 1e3).toFixed(0)} ms`)
-    ].join("");
+    $("check-count").textContent = `${present} of ${spec.checklist.length} present`;
     const rows = spec.checklist.map((c) => {
       const v = m[c.measure];
       const hit = v !== null && (c.direction === "above" ? v > c.threshold : v < c.threshold);

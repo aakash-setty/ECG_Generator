@@ -16,7 +16,7 @@ import type { LeadMorphology } from '../core/beat.js';
 import { NORMAL_INTERVALS } from '../core/landmarks.js';
 import { ST_TYPES, ST_TYPE_KEYS, type StType, type TPolarity } from '../core/st-morphology.js';
 import { TERRITORIES, TERRITORY_KEYS, applyTerritory, type Territory, type FrontalFit } from '../core/st-territory.js';
-import { $, setRoot, getRoot, val, num, readCalibration, readRhythmLead, fmtMs, syncOutputs, Calipers, downloadSvg, statTile, deltaTone } from './common.js';
+import { $, setRoot, getRoot, val, num, readCalibration, readRhythmLead, fmtMs, syncOutputs, Calipers, downloadSvg } from './common.js';
 
 type Rhythm = 'sinus' | 'svt' | 'af' | 'flutter' | 'paced';
 
@@ -312,30 +312,18 @@ function update(): void {
   const qtReq = qtc * Math.sqrt(rrReq);
   const isSinus = rhythm === 'sinus' && val('avblock') !== 'complete';
 
-  // Stat tiles.
-  const tiles: string[] = [];
-  {
-    const hr = m.heartRate;
-    const d = hr === null || !Number.isFinite(requestedRate) ? null : hr - requestedRate;
-    tiles.push(statTile('Ventricular rate', hr === null ? 'n/a' : hr.toFixed(0), 'bpm', d === null ? (Number.isFinite(requestedRate) ? null : 'variable conduction') : `${d >= 0 ? '+' : ''}${d.toFixed(1)} vs requested`, d === null ? 'muted' : deltaTone(Math.abs(d), 2, 5)));
-  }
-  if (isSinus) {
-    const d = m.meanPr === null ? null : (m.meanPr - pr) * 1000;
-    tiles.push(statTile('PR', fmtMs(m.meanPr), 'ms', d === null ? null : `${d >= 0 ? '+' : ''}${d.toFixed(0)} ms vs ${fmtMs(pr)}`, d === null ? 'muted' : deltaTone(Math.abs(d), 10, 25)));
-  }
-  {
-    const d = m.meanQrs === null ? null : (m.meanQrs - qrs) * 1000;
-    tiles.push(statTile('QRS', fmtMs(m.meanQrs), 'ms', d === null ? null : `${d >= 0 ? '+' : ''}${d.toFixed(0)} ms vs ${fmtMs(qrs)}`, d === null ? 'muted' : deltaTone(Math.abs(d), 8, 20)));
-  }
-  {
-    const d = m.qtcBazett === null ? null : (m.qtcBazett - qtc) * 1000;
-    tiles.push(statTile('QTc (Bazett)', fmtMs(m.qtcBazett), 'ms', d === null ? null : `${d >= 0 ? '+' : ''}${d.toFixed(0)} ms vs ${fmtMs(qtc)}`, d === null ? 'muted' : deltaTone(Math.abs(d), 15, 40)));
-  }
-  $<HTMLDivElement>('stats').innerHTML = tiles.join('');
 
   // Detail table.
   const delta = (a: number | null, b: number) => (a === null || !Number.isFinite(b) ? '' : ((a - b) * 1000).toFixed(0));
   const rows: Array<[string, string, string, string]> = [];
+  {
+    const hr = m.heartRate;
+    const d = hr === null || !Number.isFinite(requestedRate) ? '' : ((hr - requestedRate) >= 0 ? '+' : '') + (hr - requestedRate).toFixed(1);
+    rows.push(['Ventricular rate (bpm)', hr === null ? 'n/a' : hr.toFixed(0), Number.isFinite(requestedRate) ? requestedRate.toFixed(0) : 'variable conduction', d]);
+  }
+  if (isSinus) rows.push(['PR (ms)', fmtMs(m.meanPr), fmtMs(pr), delta(m.meanPr, pr)]);
+  rows.push(['QRS (ms)', fmtMs(m.meanQrs), fmtMs(qrs), delta(m.meanQrs, qrs)]);
+  rows.push(['QTc Bazett (ms)', fmtMs(m.qtcBazett), fmtMs(qtc), delta(m.qtcBazett, qtc)]);
   if (m.rr.length > 2) {
     const mean = m.rr.reduce((a, c) => a + c, 0) / m.rr.length;
     const sd = Math.sqrt(m.rr.reduce((a, c) => a + (c - mean) ** 2, 0) / m.rr.length);
