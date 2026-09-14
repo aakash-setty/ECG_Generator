@@ -1347,7 +1347,14 @@
   }
 
   // src/viewer/common.ts
-  var $ = (id) => document.getElementById(id);
+  var root = document;
+  function setRoot(el) {
+    root = el;
+  }
+  function getRoot() {
+    return root;
+  }
+  var $ = (id) => root.querySelector("#" + id);
   var val = (id) => $(id).value;
   var num = (id) => Number(val(id));
   function readCalibration() {
@@ -1360,7 +1367,7 @@
   var fmtMs = (x) => x === null || !Number.isFinite(x) ? "n/a" : (x * 1e3).toFixed(0);
   function syncOutputs(ids, format = {}) {
     for (const id of ids) {
-      const out = document.getElementById(id + "-out");
+      const out = root.querySelector("#" + id + "-out");
       if (out) out.value = (format[id] ?? ((v) => v))(val(id));
     }
   }
@@ -1529,7 +1536,7 @@
     const p = { ...BASE, ...PRESETS[name] ?? {} };
     loadingPreset = true;
     for (const [k, v] of Object.entries(p)) {
-      const el = document.getElementById(k);
+      const el = getRoot().querySelector("#" + k);
       if (el) el.value = String(v);
     }
     loadingPreset = false;
@@ -1596,7 +1603,7 @@
     });
   }
   function syncMorphTable() {
-    document.querySelectorAll("#morph input").forEach((el) => {
+    getRoot().querySelectorAll("#morph input").forEach((el) => {
       const m = morphology[el.dataset["lead"]];
       const key = el.dataset["key"];
       const v = key === "stShape" ? m.stShape ?? 1 : key === "stT" ? m.stT ?? m.stJ ?? 0 : m[key] ?? 0;
@@ -1605,7 +1612,7 @@
   }
   function showRowsForRhythm(rhythm) {
     const av = val("avblock");
-    document.querySelectorAll(".row").forEach((row) => {
+    getRoot().querySelectorAll(".row").forEach((row) => {
       const c = row.classList;
       let show = true;
       if (c.contains("rh-sinus")) show = rhythm === "sinus";
@@ -1770,6 +1777,7 @@
     renderFrontal();
   }
   function init() {
+    setRoot(document.querySelector('[data-view="generator"]') ?? document);
     buildStSelects();
     buildMorphTable();
     calipers = new Calipers($("ecg"), () => layout, $("caliper"), readCalibration);

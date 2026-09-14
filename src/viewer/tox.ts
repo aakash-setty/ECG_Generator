@@ -6,7 +6,7 @@ import { addNoise, NOISE_PRESETS } from '../core/noise.js';
 import { renderSvg, layoutFor, type Layout } from '../render/svg.js';
 import { TOXIDROMES, TOXIDROME_KEYS, applyToxidrome, type Toxidrome } from '../core/tox.js';
 import { toxMeasures, type ToxMeasures } from '../measure/tox-measures.js';
-import { $, val, num, readCalibration, readRhythmLead, syncOutputs, Calipers, downloadSvg, statTile } from './common.js';
+import { $, setRoot, val, num, readCalibration, readRhythmLead, syncOutputs, Calipers, downloadSvg, statTile } from './common.js';
 
 let strip: Strip | null = null;
 let layout: Layout | null = null;
@@ -127,6 +127,7 @@ function update(): void {
 }
 
 function init(): void {
+  setRoot(document.querySelector('[data-view="tox"]') ?? document);
   const sel = $<HTMLSelectElement>('tox');
   sel.innerHTML = TOXIDROME_KEYS.map((k) => `<option value="${k}">${TOXIDROMES[k].label}</option>`).join('');
   calipers = new Calipers($('ecg'), () => layout, $('caliper'), readCalibration);

@@ -6,7 +6,19 @@ import { locate, type Layout } from '../render/svg.js';
 import type { Calibration, Gain, PaperSpeed } from '../core/units.js';
 import type { LeadName } from '../core/leads.js';
 
-export const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+/**
+ * Element lookup scoped to a root. The standalone pages use the document; the
+ * combined artifact page hosts both viewers at once, so each bundle scopes its
+ * lookups to its own `data-view` container and ids may repeat across views.
+ */
+let root: ParentNode = document;
+export function setRoot(el: ParentNode): void {
+  root = el;
+}
+export function getRoot(): ParentNode {
+  return root;
+}
+export const $ = <T extends HTMLElement>(id: string) => root.querySelector('#' + id) as T;
 export const val = (id: string) => $<HTMLInputElement>(id).value;
 export const num = (id: string) => Number(val(id));
 
@@ -24,7 +36,7 @@ export const fmtMs = (x: number | null) => (x === null || !Number.isFinite(x) ? 
 /** Mirror every slider's value into its `<output id="{id}-out">`, if one exists. */
 export function syncOutputs(ids: string[], format: Record<string, (v: string) => string> = {}): void {
   for (const id of ids) {
-    const out = document.getElementById(id + '-out') as HTMLOutputElement | null;
+    const out = root.querySelector('#' + id + '-out') as HTMLOutputElement | null;
     if (out) out.value = (format[id] ?? ((v) => v))(val(id));
   }
 }

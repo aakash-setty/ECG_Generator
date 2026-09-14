@@ -16,7 +16,7 @@ import type { LeadMorphology } from '../core/beat.js';
 import { NORMAL_INTERVALS } from '../core/landmarks.js';
 import { ST_TYPES, ST_TYPE_KEYS, type StType, type TPolarity } from '../core/st-morphology.js';
 import { TERRITORIES, TERRITORY_KEYS, applyTerritory, type Territory, type FrontalFit } from '../core/st-territory.js';
-import { $, val, num, readCalibration, readRhythmLead, fmtMs, syncOutputs, Calipers, downloadSvg, statTile, deltaTone } from './common.js';
+import { $, setRoot, getRoot, val, num, readCalibration, readRhythmLead, fmtMs, syncOutputs, Calipers, downloadSvg, statTile, deltaTone } from './common.js';
 
 type Rhythm = 'sinus' | 'svt' | 'af' | 'flutter' | 'paced';
 
@@ -102,7 +102,7 @@ function loadPreset(name: string): void {
   const p = { ...BASE, ...(PRESETS[name] ?? {}) };
   loadingPreset = true;
   for (const [k, v] of Object.entries(p)) {
-    const el = document.getElementById(k) as HTMLInputElement | HTMLSelectElement | null;
+    const el = getRoot().querySelector('#' + k) as HTMLInputElement | HTMLSelectElement | null;
     if (el) el.value = String(v);
   }
   loadingPreset = false;
@@ -179,7 +179,7 @@ function buildMorphTable(): void {
 }
 
 function syncMorphTable(): void {
-  document.querySelectorAll<HTMLInputElement>('#morph input').forEach((el) => {
+  getRoot().querySelectorAll<HTMLInputElement>('#morph input').forEach((el) => {
     const m = morphology[el.dataset['lead'] as IndependentLead];
     const key = el.dataset['key'] as MorphKey;
     const v = key === 'stShape' ? m.stShape ?? 1 : key === 'stT' ? m.stT ?? m.stJ ?? 0 : (m[key] as number | undefined) ?? 0;
@@ -191,7 +191,7 @@ function syncMorphTable(): void {
 
 function showRowsForRhythm(rhythm: Rhythm): void {
   const av = val('avblock');
-  document.querySelectorAll<HTMLElement>('.row').forEach((row) => {
+  getRoot().querySelectorAll<HTMLElement>('.row').forEach((row) => {
     const c = row.classList;
     let show = true;
     if (c.contains('rh-sinus')) show = rhythm === 'sinus';
@@ -380,6 +380,7 @@ function update(): void {
 /* ------------------------------ wiring ------------------------------- */
 
 function init(): void {
+  setRoot(document.querySelector('[data-view="generator"]') ?? document);
   buildStSelects();
   buildMorphTable();
   calipers = new Calipers($('ecg'), () => layout, $('caliper'), readCalibration);

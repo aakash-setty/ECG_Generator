@@ -1,0 +1,340 @@
+<title>ECG Generator</title>
+<link rel="stylesheet" href="ui.css">
+<style>
+  [hidden] { display: none !important; }
+  .view-tabs a { cursor: pointer; }
+  .appbar nav a:focus-visible { outline: 2px solid #93c5fd; outline-offset: 2px; }
+</style>
+<header class="appbar">
+  <div class="brand"><span class="mark"></span>ECG Generator</div>
+  <nav class="view-tabs" aria-label="Views">
+    <a class="active" href="#generator" data-tab="generator" role="tab" aria-selected="true">Generator</a>
+    <a href="#tox" data-tab="tox" role="tab" aria-selected="false">Toxicology</a>
+  </nav>
+  <div class="spacer"></div>
+  <span class="tag">Synthetic. Not for clinical use.</span>
+</header>
+
+<main class="layout" data-view="generator" id="view-generator">
+  <aside class="sidebar">
+    <section class="card">
+      <div class="card-head">Case <span class="hint">loads every control</span></div>
+      <div class="card-body">
+        <div class="row no-value"><label for="preset">Preset</label>
+          <select id="preset">
+            <option value="custom">Custom (edited)</option>
+            <optgroup label="Sinus">
+              <option value="normal">Normal sinus rhythm</option>
+              <option value="brady-pr">Sinus bradycardia, PR 220 ms</option>
+              <option value="tachy">Sinus tachycardia 140</option>
+              <option value="wenckebach">Second-degree block, Wenckebach 4:3</option>
+              <option value="two-to-one">Second-degree block, 2:1</option>
+              <option value="chb">Complete heart block, junctional escape</option>
+              <option value="bigeminy">Ventricular bigeminy</option>
+              <option value="paced">Ventricular pacing (VVI), dissociated P</option>
+            </optgroup>
+            <optgroup label="Supraventricular">
+              <option value="svt">SVT (AVNRT-like) 180</option>
+              <option value="af">Atrial fibrillation, controlled rate</option>
+              <option value="af-rvr">Atrial fibrillation, rapid ventricular response</option>
+              <option value="af-svr">Atrial fibrillation, slow ventricular response</option>
+              <option value="flutter-21">Atrial flutter 2:1</option>
+              <option value="flutter-41">Atrial flutter 4:1</option>
+              <option value="flutter-var">Atrial flutter, variable block</option>
+            </optgroup>
+            <optgroup label="Ischaemia and repolarisation">
+              <option value="inferior-ste">Inferior STEMI (convex)</option>
+              <option value="anterior-ste">Anterior STEMI (tombstone)</option>
+              <option value="pericarditis">Diffuse concave elevation</option>
+              <option value="posterior">Posterior MI (V1 to V3 mirror)</option>
+              <option value="lqt">Long QT, broad T (QTc 520)</option>
+              <option value="hypocalcaemia">Long ST, normal T (hypocalcaemia-like)</option>
+            </optgroup>
+          </select></div>
+        <p class="note">Change any control and the case becomes Custom. Nothing reloads behind you.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <details open>
+        <summary>Rhythm</summary>
+        <div class="card-body">
+          <div class="row no-value"><label for="rhythm">Rhythm</label>
+            <select id="rhythm">
+              <option value="sinus">Sinus</option>
+              <option value="svt">SVT (AVNRT-like)</option>
+              <option value="af">Atrial fibrillation</option>
+              <option value="flutter">Atrial flutter</option>
+              <option value="paced">Ventricular pacing (VVI)</option>
+            </select></div>
+          <div class="row"><label id="rate-label" for="rate">Sinus rate (bpm)</label><input type="range" id="rate" min="30" max="220" step="1" value="72"><output id="rate-out"></output></div>
+          <div class="row rh-sinus"><label for="jitter">RR jitter (%)</label><input type="range" id="jitter" min="0" max="15" step="0.5" value="3"><output id="jitter-out"></output></div>
+          <div class="row no-value rh-sinus"><label for="avblock">AV block</label>
+            <select id="avblock">
+              <option value="none">None</option>
+              <option value="first">First degree (set PR below)</option>
+              <option value="wenckebach">Wenckebach (Mobitz I)</option>
+              <option value="mobitz2">Mobitz II / fixed ratio</option>
+              <option value="complete">Complete (third degree)</option>
+            </select></div>
+          <div class="row rh-sinus rh-block-ratio"><label for="blockratio">P waves per cycle</label><input type="range" id="blockratio" min="2" max="6" step="1" value="4"><output id="blockratio-out"></output></div>
+          <div class="row rh-sinus rh-escape"><label for="escape">Escape rate (bpm)</label><input type="range" id="escape" min="20" max="60" step="1" value="40"><output id="escape-out"></output></div>
+          <div class="row no-value rh-sinus rh-escape"><label for="escapefocus">Escape focus</label><select id="escapefocus"><option value="junctional">Junctional (narrow)</option><option value="ventricular">Ventricular (wide)</option></select></div>
+          <div class="row no-value rh-sinus"><label for="ectopy">Ventricular ectopy</label>
+            <select id="ectopy">
+              <option value="0">None</option>
+              <option value="1">Bigeminy</option>
+              <option value="2">Trigeminy</option>
+              <option value="4">PVC every 4th beat</option>
+            </select></div>
+          <div class="row rh-af"><label for="irreg">Irregularity</label><input type="range" id="irreg" min="0.05" max="0.45" step="0.01" value="0.25"><output id="irreg-out"></output></div>
+          <div class="row rh-af"><label for="fwave">f-wave amplitude (mV)</label><input type="range" id="fwave" min="0" max="0.2" step="0.01" value="0.06"><output id="fwave-out"></output></div>
+          <div class="row rh-flutter"><label for="flutterrate">Flutter rate (/min)</label><input type="range" id="flutterrate" min="240" max="350" step="5" value="300"><output id="flutterrate-out"></output></div>
+          <div class="row no-value rh-flutter"><label for="conduction">AV conduction</label>
+            <select id="conduction">
+              <option value="2">2:1</option>
+              <option value="3">3:1</option>
+              <option value="4">4:1</option>
+              <option value="variable">Variable</option>
+            </select></div>
+          <div class="row rh-flutter"><label for="flutteramp">Flutter wave (mV, II)</label><input type="range" id="flutteramp" min="0.05" max="0.3" step="0.01" value="0.15"><output id="flutteramp-out"></output></div>
+          <div class="row no-value rh-paced"><label for="pacedp">Underlying P waves</label><select id="pacedp"><option value="1">Dissociated sinus P</option><option value="0">None</option></select></div>
+          <div class="row"><label for="seed">Seed</label><input type="range" id="seed" min="1" max="99" step="1" value="1"><output id="seed-out"></output></div>
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <details open>
+        <summary>Intervals</summary>
+        <div class="card-body">
+          <div class="row rh-sinus"><label for="pdur">P duration (ms)</label><input type="range" id="pdur" min="40" max="160" step="2" value="90"><output id="pdur-out"></output></div>
+          <div class="row rh-sinus"><label for="pr">PR (ms)</label><input type="range" id="pr" min="80" max="400" step="2" value="160"><output id="pr-out"></output></div>
+          <div class="row"><label for="qrs">QRS (ms)</label><input type="range" id="qrs" min="50" max="200" step="2" value="90"><output id="qrs-out"></output></div>
+          <div class="row"><label for="qtc">QTc Bazett (ms)</label><input type="range" id="qtc" min="300" max="600" step="2" value="410"><output id="qtc-out"></output></div>
+          <div class="row no-value"><label for="qtmode">QT partition</label>
+            <select id="qtmode">
+              <option value="fraction" selected>ST as share of JT (rate-adaptive)</option>
+              <option value="fixed">Fixed ST duration</option>
+            </select></div>
+          <div class="row"><label for="stfrac">ST share of JT</label><input type="range" id="stfrac" min="0.05" max="0.75" step="0.01" value="0.32"><output id="stfrac-out"></output></div>
+          <div class="row"><label for="stexp">ST rate exponent</label><input type="range" id="stexp" min="0" max="1" step="0.05" value="0.5"><output id="stexp-out"></output></div>
+          <div class="row"><label for="st">ST segment (ms)</label><input type="range" id="st" min="0" max="200" step="2" value="100"><output id="st-out"></output></div>
+          <p class="note" id="partition-info"></p>
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <details open>
+        <summary>ST and T overlay</summary>
+        <div class="card-body">
+          <div class="row no-value"><label for="territory">Territory</label><select id="territory"></select></div>
+          <div class="row no-value"><label for="sttype">ST type</label><select id="sttype"></select></div>
+          <div class="row"><label for="stmag">Magnitude at J (mV)</label><input type="range" id="stmag" min="0" max="1.0" step="0.05" value="0.3"><output id="stmag-out"></output></div>
+          <div class="row no-value"><label for="reciptype">Reciprocal shape</label>
+            <select id="reciptype">
+              <option value="straight-horizontal" selected>Straight, horizontal</option>
+              <option value="straight-downsloping">Straight, downsloping</option>
+              <option value="straight-upsloping">Straight, upsloping</option>
+            </select></div>
+          <div class="row no-value"><label for="tpol">T polarity</label>
+            <select id="tpol">
+              <option value="default" selected>Type default</option>
+              <option value="upright">Upright</option>
+              <option value="inverted">Inverted</option>
+            </select></div>
+          <p class="note" id="sttype-desc"></p>
+          <div class="small" id="frontal"></div>
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <details>
+        <summary>Display and realism</summary>
+        <div class="card-body">
+          <div class="row no-value"><label for="speed">Paper speed</label><select id="speed"><option value="25">25 mm/s</option><option value="50">50 mm/s</option></select></div>
+          <div class="row no-value"><label for="gain">Gain</label><select id="gain"><option value="5">5 mm/mV</option><option value="10" selected>10 mm/mV</option><option value="20">20 mm/mV</option></select></div>
+          <div class="row no-value"><label for="rhythmlead">Rhythm strip lead</label><select id="rhythmlead"><option value="II" selected>II</option><option value="V1">V1</option><option value="V5">V5</option><option value="none">None</option></select></div>
+          <div class="row no-value"><label for="theme">Paper</label><select id="theme"><option value="paper" selected>Red grid</option><option value="mono">Grey grid</option></select></div>
+          <div class="row no-value"><label for="noise">Noise and artefact</label>
+            <select id="noise">
+              <option value="none" selected>None (clean)</option>
+              <option value="light">Light</option>
+              <option value="moderate">Moderate</option>
+              <option value="heavy">Heavy</option>
+            </select></div>
+          <p class="note">Noise adds baseline wander, mains and muscle artefact after synthesis; the lead identities still hold exactly.</p>
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <details>
+        <summary>Per-lead morphology (advanced)</summary>
+        <div class="card-body">
+          <div class="morph-wrap"><table class="morph" id="morph"></table></div>
+          <div class="btns" style="margin-top:8px"><button class="btn small" id="morph-reset">Reset from ST panel</button></div>
+          <p class="note">Amplitudes in mV for the 8 authored channels. III, aVR, aVL and aVF are derived. Edits persist until the ST panel or a preset rebuilds the set. Defaults are hand-set placeholders, not fitted to data.</p>
+        </div>
+      </details>
+    </section>
+  </aside>
+
+  <section class="content">
+    <div class="card ecg-card">
+      <div class="ecg-toolbar">
+        <span class="title" id="case-title">Normal sinus rhythm</span>
+        <span class="chips" id="case-chips"></span>
+        <span class="spacer"></span>
+        <div class="btns">
+          <button class="btn small" id="clear-cal">Clear calipers</button>
+          <button class="btn small" id="print">Print true size</button>
+          <button class="btn small primary" id="download">Download SVG</button>
+        </div>
+      </div>
+      <div class="paper" id="ecg"></div>
+      <div class="paper-foot"><span class="caliper" id="caliper">Calipers: click two points on the tracing.</span><span class="spacer"></span><span id="identities"></span></div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="grid-2 below">
+      <section class="card">
+        <div class="card-head">Measured vs requested <span class="hint">lead II, independent delineator</span></div>
+        <div class="card-body">
+          <table class="data" id="meas"></table>
+          <p class="note">Threshold delineation lags a smooth onset by a few ms (see README for observed round-trip error). In AF and flutter, P-related measurements are not meaningful.</p>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head">Generator notes</div>
+        <div class="card-body">
+          <div id="warnings" class="ok-text">No warnings.</div>
+          <p class="note" id="rhythm-note"></p>
+        </div>
+      </section>
+    </div>
+  </section>
+</main>
+
+<main class="layout" data-view="tox" id="view-tox" hidden>
+  <aside class="sidebar">
+    <section class="card">
+      <div class="card-head">Pattern</div>
+      <div class="card-body">
+        <div class="row no-value"><label for="tox">Toxidrome</label><select id="tox"></select></div>
+        <div class="row no-value hidden" id="variant-row"><label for="variant">Drug class</label><select id="variant"></select></div>
+        <div class="row"><label for="sev">Severity</label><input type="range" id="sev" min="0" max="1" step="0.05" value="0.6"><output id="sev-out"></output></div>
+        <div class="row"><label for="seed">Seed</label><input type="range" id="seed" min="1" max="99" step="1" value="3"><output id="seed-out"></output></div>
+        <p class="note">Severity 0 is drug effect or early toxicity; 1 is severe. The mapping from severity to intervals and amplitudes is a stylisation; the source pages establish the features and thresholds.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <details open>
+        <summary>What this severity sets</summary>
+        <div class="card-body"><dl class="kv" id="settings"></dl></div>
+      </details>
+    </section>
+
+    <section class="card">
+      <details open>
+        <summary>Pattern notes</summary>
+        <div class="card-body">
+          <p class="small" id="examples"></p>
+          <p id="mechanism" style="margin:8px 0"></p>
+          <div class="subhead">ECG features (source wording)</div>
+          <ul class="list" id="features"></ul>
+          <div class="subhead">Not modelled</div>
+          <ul class="list small" id="notmodelled"></ul>
+          <div class="subhead">Sources</div>
+          <ul class="list small" id="sources"></ul>
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <details>
+        <summary>Display and realism</summary>
+        <div class="card-body">
+          <div class="row no-value"><label for="speed">Paper speed</label><select id="speed"><option value="25">25 mm/s</option><option value="50">50 mm/s</option></select></div>
+          <div class="row no-value"><label for="gain">Gain</label><select id="gain"><option value="5">5 mm/mV</option><option value="10" selected>10 mm/mV</option><option value="20">20 mm/mV</option></select></div>
+          <div class="row no-value"><label for="rhythmlead">Rhythm strip lead</label><select id="rhythmlead"><option value="II" selected>II</option><option value="V1">V1</option><option value="V5">V5</option><option value="none">None</option></select></div>
+          <div class="row no-value"><label for="theme">Paper</label><select id="theme"><option value="paper" selected>Red grid</option><option value="mono">Grey grid</option></select></div>
+          <div class="row no-value"><label for="noise">Noise and artefact</label>
+            <select id="noise">
+              <option value="none" selected>None (clean)</option>
+              <option value="light">Light</option>
+              <option value="moderate">Moderate</option>
+              <option value="heavy">Heavy</option>
+            </select></div>
+        </div>
+      </details>
+    </section>
+  </aside>
+
+  <section class="content">
+    <div class="card ecg-card">
+      <div class="ecg-toolbar">
+        <span class="title" id="case-title"></span>
+        <span class="chips" id="case-chips"></span>
+        <span class="spacer"></span>
+        <div class="btns">
+          <button class="btn small" id="clear-cal">Clear calipers</button>
+          <button class="btn small" id="print">Print true size</button>
+          <button class="btn small primary" id="download">Download SVG</button>
+        </div>
+      </div>
+      <div class="paper" id="ecg"></div>
+      <div class="paper-foot"><span class="caliper" id="caliper">Calipers: click two points on the tracing.</span><span class="spacer"></span><span id="warnings"></span></div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="grid-2 below">
+      <section class="card">
+        <div class="card-head">Feature checklist <span class="hint">measured from the samples</span></div>
+        <div class="card-body">
+          <table class="data" id="check"></table>
+          <p class="note" id="measnote"></p>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head">All measurements</div>
+        <div class="card-body"><table class="data" id="allmeas"></table></div>
+      </section>
+    </div>
+  </section>
+</main>
+
+<script src="bundle.js"></script>
+<script src="tox-bundle.js"></script>
+<script>
+(function () {
+  var tabs = document.querySelectorAll('.view-tabs a[data-tab]');
+  var views = { generator: document.getElementById('view-generator'), tox: document.getElementById('view-tox') };
+  function show(name) {
+    if (!views[name]) name = 'generator';
+    Object.keys(views).forEach(function (k) { views[k].hidden = k !== name; });
+    tabs.forEach(function (a) {
+      var on = a.getAttribute('data-tab') === name;
+      a.classList.toggle('active', on);
+      a.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    try { localStorage.setItem('ecg-view', name); } catch (e) {}
+  }
+  tabs.forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      var name = a.getAttribute('data-tab');
+      show(name);
+      try { history.replaceState(null, '', '#' + name); } catch (e2) {}
+    });
+  });
+  var initial = (location.hash || '').replace('#', '');
+  if (!initial) { try { initial = localStorage.getItem('ecg-view') || ''; } catch (e) {} }
+  show(initial || 'generator');
+})();
+</script>

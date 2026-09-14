@@ -1464,7 +1464,11 @@
   }
 
   // src/viewer/common.ts
-  var $ = (id) => document.getElementById(id);
+  var root = document;
+  function setRoot(el) {
+    root = el;
+  }
+  var $ = (id) => root.querySelector("#" + id);
   var val = (id) => $(id).value;
   var num = (id) => Number(val(id));
   function readCalibration() {
@@ -1476,7 +1480,7 @@
   }
   function syncOutputs(ids, format = {}) {
     for (const id of ids) {
-      const out = document.getElementById(id + "-out");
+      const out = root.querySelector("#" + id + "-out");
       if (out) out.value = (format[id] ?? ((v) => v))(val(id));
     }
   }
@@ -1682,6 +1686,7 @@
     $("warnings").textContent = strip.warnings.length ? `${strip.warnings.length} beats overlap the preceding T or U wave` : "";
   }
   function init() {
+    setRoot(document.querySelector('[data-view="tox"]') ?? document);
     const sel = $("tox");
     sel.innerHTML = TOXIDROME_KEYS.map((k) => `<option value="${k}">${TOXIDROMES[k].label}</option>`).join("");
     calipers = new Calipers($("ecg"), () => layout, $("caliper"), readCalibration);
