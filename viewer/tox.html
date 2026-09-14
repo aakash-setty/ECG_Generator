@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ECG Generator: Toxicology</title>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<header class="appbar">
+  <div class="brand"><span class="mark"></span>ECG Generator</div>
+  <nav>
+    <a href="index.html">Generator</a>
+    <a class="active" href="tox.html">Toxicology</a>
+  </nav>
+  <div class="spacer"></div>
+  <span class="tag">Synthetic. Not for clinical use.</span>
+</header>
+
+<main class="layout">
+  <aside class="sidebar">
+    <section class="card">
+      <div class="card-head">Pattern</div>
+      <div class="card-body">
+        <div class="row no-value"><label for="tox">Toxidrome</label><select id="tox"></select></div>
+        <div class="row no-value hidden" id="variant-row"><label for="variant">Drug class</label><select id="variant"></select></div>
+        <div class="row"><label for="sev">Severity</label><input type="range" id="sev" min="0" max="1" step="0.05" value="0.6"><output id="sev-out"></output></div>
+        <div class="row"><label for="seed">Seed</label><input type="range" id="seed" min="1" max="99" step="1" value="3"><output id="seed-out"></output></div>
+        <p class="note">Severity 0 is drug effect or early toxicity; 1 is severe. The mapping from severity to intervals and amplitudes is a stylisation; the source pages establish the features and thresholds.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <details open>
+        <summary>What this severity sets</summary>
+        <div class="card-body"><dl class="kv" id="settings"></dl></div>
+      </details>
+    </section>
+
+    <section class="card">
+      <details open>
+        <summary>Pattern notes</summary>
+        <div class="card-body">
+          <p class="small" id="examples"></p>
+          <p id="mechanism" style="margin:8px 0"></p>
+          <div class="subhead">ECG features (source wording)</div>
+          <ul class="list" id="features"></ul>
+          <div class="subhead">Not modelled</div>
+          <ul class="list small" id="notmodelled"></ul>
+          <div class="subhead">Sources</div>
+          <ul class="list small" id="sources"></ul>
+        </div>
+      </details>
+    </section>
+
+    <section class="card">
+      <details>
+        <summary>Display and realism</summary>
+        <div class="card-body">
+          <div class="row no-value"><label for="speed">Paper speed</label><select id="speed"><option value="25">25 mm/s</option><option value="50">50 mm/s</option></select></div>
+          <div class="row no-value"><label for="gain">Gain</label><select id="gain"><option value="5">5 mm/mV</option><option value="10" selected>10 mm/mV</option><option value="20">20 mm/mV</option></select></div>
+          <div class="row no-value"><label for="rhythmlead">Rhythm strip lead</label><select id="rhythmlead"><option value="II" selected>II</option><option value="V1">V1</option><option value="V5">V5</option><option value="none">None</option></select></div>
+          <div class="row no-value"><label for="theme">Paper</label><select id="theme"><option value="paper" selected>Red grid</option><option value="mono">Grey grid</option></select></div>
+          <div class="row no-value"><label for="noise">Noise and artefact</label>
+            <select id="noise">
+              <option value="none" selected>None (clean)</option>
+              <option value="light">Light</option>
+              <option value="moderate">Moderate</option>
+              <option value="heavy">Heavy</option>
+            </select></div>
+        </div>
+      </details>
+    </section>
+  </aside>
+
+  <section class="content">
+    <div class="card ecg-card">
+      <div class="ecg-toolbar">
+        <span class="title" id="case-title"></span>
+        <span class="chips" id="case-chips"></span>
+        <span class="spacer"></span>
+        <div class="btns">
+          <button class="btn small" id="clear-cal">Clear calipers</button>
+          <button class="btn small" id="print">Print true size</button>
+          <button class="btn small primary" id="download">Download SVG</button>
+        </div>
+      </div>
+      <div class="paper" id="ecg"></div>
+      <div class="paper-foot"><span class="caliper" id="caliper">Calipers: click two points on the tracing.</span><span class="spacer"></span><span id="warnings"></span></div>
+    </div>
+
+    <div class="stats" id="stats"></div>
+
+    <div class="grid-2 below">
+      <section class="card">
+        <div class="card-head">Feature checklist <span class="hint">measured from the samples</span></div>
+        <div class="card-body">
+          <table class="data" id="check"></table>
+          <p class="note" id="measnote"></p>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head">All measurements</div>
+        <div class="card-body"><table class="data" id="allmeas"></table></div>
+      </section>
+    </div>
+  </section>
+</main>
+<script src="tox-bundle.js"></script>
+</body>
+</html>

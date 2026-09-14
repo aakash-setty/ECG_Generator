@@ -1,0 +1,19 @@
+{
+  "name": "ecg-generator",
+  "version": "0.1.0",
+  "description": "Landmark-first, millimetre-exact 12-lead ECG generator. TypeScript core, Node test harness, browser viewer.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/**/*.test.js",
+    "bundle": "esbuild src/viewer/main.ts --bundle --format=iife --target=es2020 --outfile=viewer/bundle.js && esbuild src/viewer/tox.ts --bundle --format=iife --target=es2020 --outfile=viewer/tox-bundle.js",
+    "render": "npm run build && node dist/cli/render.js",
+    "all": "npm run test && npm run bundle && node dist/cli/render.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.0.0"
+  }
+}
