@@ -43,6 +43,12 @@ export interface LeadMorphology {
   /** Sharpness for P, QRS waves and T. See bump(). */
   pSharpness?: number;
   qrsSharpness?: number;
+  /**
+   * Sharpness of the LAST QRS deflection only (R' if present, else S, else R).
+   * Defaults to qrsSharpness. Values above 1 make the terminal deflection a
+   * broad dome with a slurred return to J, as in conduction delay.
+   */
+  terminalSharpness?: number;
   tSharpness?: number;
   /**
    * Per-lead override of where the T peak sits within [T onset, T offset], 0 to 1.
@@ -57,6 +63,7 @@ export function beatDeflections(lm: BeatLandmarks, m: LeadMorphology, pOnly = fa
   const out: Deflection[] = [];
   const pS = m.pSharpness ?? 1.0;
   const qrsS = m.qrsSharpness ?? 0.8;
+  const termS = m.terminalSharpness ?? qrsS;
   const tS = m.tSharpness ?? 1.0;
 
   if (lm.pOn !== null && lm.pPeak !== null && lm.pOff !== null && m.p !== 0) {
@@ -67,9 +74,11 @@ export function beatDeflections(lm: BeatLandmarks, m: LeadMorphology, pOnly = fa
   const hasQ = m.q !== 0;
   const hasR = m.r !== 0;
   const hasS = m.s !== 0;
+  const hasRPrime = (m.rPrime ?? 0) !== 0;
+  const last: 'q' | 'r' | 's' | 'rp' | null = hasRPrime ? 'rp' : hasS ? 's' : hasR ? 'r' : hasQ ? 'q' : null;
 
   if (hasQ) {
-    out.push(bump({ on: lm.qrsOn, peak: lm.qPeak, off: hasR ? lm.rPeak : hasS ? lm.sPeak : lm.j, amplitude: m.q, sharpness: qrsS }));
+    out.push(bump({ on: lm.qrsOn, peak: lm.qPeak, off: hasR ? lm.rPeak : hasS ? lm.sPeak : lm.j, amplitude: m.q, sharpness: last === 'q' ? termS : qrsS }));
   }
   if (hasR) {
     out.push(
@@ -78,16 +87,15 @@ export function beatDeflections(lm: BeatLandmarks, m: LeadMorphology, pOnly = fa
         peak: lm.rPeak,
         off: hasS ? lm.sPeak : lm.j,
         amplitude: m.r,
-        sharpness: qrsS,
+        sharpness: last === 'r' ? termS : qrsS,
       }),
     );
   }
-  const hasRPrime = (m.rPrime ?? 0) !== 0;
   if (hasS) {
-    out.push(bump({ on: hasR ? lm.rPeak : hasQ ? lm.qPeak : lm.qrsOn, peak: lm.sPeak, off: hasRPrime ? lm.rPrimePeak : lm.j, amplitude: m.s, sharpness: qrsS }));
+    out.push(bump({ on: hasR ? lm.rPeak : hasQ ? lm.qPeak : lm.qrsOn, peak: lm.sPeak, off: hasRPrime ? lm.rPrimePeak : lm.j, amplitude: m.s, sharpness: last === 's' ? termS : qrsS }));
   }
   if (hasRPrime) {
-    out.push(bump({ on: hasS ? lm.sPeak : hasR ? lm.rPeak : hasQ ? lm.qPeak : lm.qrsOn, peak: lm.rPrimePeak, off: lm.j, amplitude: m.rPrime as number, sharpness: qrsS }));
+    out.push(bump({ on: hasS ? lm.sPeak : hasR ? lm.rPeak : hasQ ? lm.qPeak : lm.qrsOn, peak: lm.rPrimePeak, off: lm.j, amplitude: m.rPrime as number, sharpness: termS }));
   }
 
   // ST segment. The rise from 0 to the J-point level happens during the terminal

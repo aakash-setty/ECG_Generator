@@ -90,9 +90,32 @@ export function toxMeasures(strip: Strip): ToxMeasures {
     }
   }
 
-  const mV3 = delineate(strip.leads.V3, fs);
-  const sinusV3 = sinusBeats(strip, mV3.beats);
-  const tAmpV3 = mean(sinusV3.map((b) => b.tAmplitude).filter((x): x is number => x !== null));
+  // V3 T amplitude with QRS timing taken from lead II (as a multi-lead machine would): the
+  // largest excursion from the V3 baseline between J(II) + 40 ms and the next QRS onset. A giant
+  // peaked T in V3 can out-slope V3's own small QRS, so V3's own detection is not trusted here.
+  const v3 = strip.leads.V3;
+  const bV3 = (() => {
+    const counts = new Map<number, number>();
+    for (let i = 0; i < v3.length; i++) counts.set(Math.round((v3[i] ?? 0) / 0.005), (counts.get(Math.round((v3[i] ?? 0) / 0.005)) ?? 0) + 1);
+    let bestK = 0;
+    let bestC = -1;
+    for (const [k, c] of counts) if (c > bestC) { bestC = c; bestK = k; }
+    return bestK * 0.005;
+  })();
+  const tV3s: number[] = [];
+  for (let k = 0; k < sinusII.length; k++) {
+    const b = sinusII[k]!;
+    const next = mII.beats.find((m) => m.qrsOn > b.j);
+    const i0 = Math.round((b.j + 0.04) * fs);
+    const i1 = Math.min(v3.length - 1, Math.round(((next ? next.qrsOn - 0.15 : b.j + 0.5)) * fs), Math.round((b.j + 0.5) * fs));
+    let best = 0;
+    for (let i = i0; i <= i1; i++) {
+      const a = (v3[i] ?? 0) - bV3;
+      if (Math.abs(a) > Math.abs(best)) best = a;
+    }
+    if (i1 > i0 && Math.abs(best) >= 0.03) tV3s.push(best);
+  }
+  const tAmpV3 = mean(tV3s);
   const pAmpII = sinusII.length ? mean(sinusII.map((b) => (b.pAmplitude === null ? 0 : Math.abs(b.pAmplitude)))) : null;
   const jtp = mean(sinusII.filter((b) => b.tPeak !== null).map((b) => (b.tPeak as number) - b.j));
   const tpe = mean(sinusII.filter((b) => b.tPeak !== null && b.tOff !== null).map((b) => (b.tOff as number) - (b.tPeak as number)));

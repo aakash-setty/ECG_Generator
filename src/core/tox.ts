@@ -14,9 +14,9 @@
  */
 
 import type { LeadMorphology } from './beat.js';
-import { NORMAL_MORPHOLOGY, cloneMorphology, type IndependentSet } from './leads.js';
+import { NORMAL_MORPHOLOGY, INDEPENDENT_LEADS, cloneMorphology, type IndependentSet } from './leads.js';
+import { applySecondaryRepolarisation, frontalTerminal } from './secondary-repolarisation.js';
 import type { SinusOptions, EctopyOptions, QtPartition, AvBlockOptions } from './sequencer.js';
-import { LIMB_LEAD_VECTORS } from './st-territory.js';
 
 export type Toxidrome = 'sodium-channel-blocker' | 'digoxin' | 'potassium-channel-blocker' | 'hyperkalaemia' | 'beta-blocker-ccb' | 'hypocalcaemia';
 export const TOXIDROME_KEYS: Toxidrome[] = ['sodium-channel-blocker', 'digoxin', 'potassium-channel-blocker', 'hyperkalaemia', 'beta-blocker-ccb', 'hypocalcaemia'];
@@ -92,22 +92,29 @@ export const SODIUM_CHANNEL_BLOCKER: ToxSpec = {
   label: 'Sodium channel blocker (TCA type)',
   examples: 'Tricyclic antidepressants; also class Ia/Ic antiarrhythmics, propranolol, carbamazepine, cocaine, local anaesthetics.',
   mechanism:
-    'Fast sodium channel blockade slows phase 0 depolarisation, widening the QRS. LITFL: the right-sided intraventricular conducting system is more susceptible, which produces terminal right axis deviation of the QRS. Muscarinic (M1) blockade gives sinus tachycardia.',
+    'Fast sodium channel blockade slows phase 0 depolarisation, widening the QRS. LITFL: the right-sided intraventricular conducting system is more susceptible, which produces terminal right axis deviation of the QRS. Wolfe et al. (1989) report a terminal 40 ms frontal plane axis of 130 to 270 degrees in TCA poisoning. The slowed, abnormal depolarisation sequence carries a secondary repolarisation change of the bundle branch block kind: the T wave points opposite the terminal QRS deflection and rises straight out of it, with no flat ST segment. Muscarinic (M1) blockade gives sinus tachycardia.',
   features: [
     'Sinus tachycardia (M1 receptor blockade)',
-    'Intraventricular conduction delay: QRS > 100 ms in lead II',
-    "Terminal R wave (R') in aVR > 3 mm, or R/S ratio > 0.7 in aVR (terminal right axis deviation)",
-    'QRS > 100 ms predicts seizures; QRS > 160 ms predicts ventricular arrhythmias',
-    'QT prolongation',
+    'Intraventricular conduction delay: QRS > 100 ms in lead II (Boehnert and Lovejoy 1985: QRS >= 100 ms predicted seizures, >= 160 ms ventricular arrhythmias)',
+    "Terminal R wave (R') in aVR > 3 mm, or R/S ratio > 0.7 in aVR (Liebelt et al. 1995; terminal right axis deviation)",
+    'Terminal 40 ms frontal plane QRS axis 130 to 270 degrees (Wolfe et al. 1989); modelled at +250 degrees',
+    'Broad, large T waves opposite the terminal QRS deflection (upright in II, III, aVF, V3 to V6; inverted in aVR, V1, V2) with the ST segment lost into the S upstroke: secondary repolarisation, as in bundle branch block',
+    'QT prolongation, mostly through the widened QRS',
+    'Severe toxicity: QRS and T fuse into a sine-wave appearance (LITFL Example 1b: "marked QRS broadening producing a sine wave appearance reminiscent of hyperkalaemia")',
   ],
   notModelled: [
     'Brugada-pattern ST elevation in V1 to V2 (reported with sodium channel blockade)',
     'Ventricular tachycardia, hypotension-related changes, and the response to sodium bicarbonate',
     'Rate-dependent (use-dependent) block: QRS widening here does not vary with rate',
+    'The T wave rule (T = -0.8 x terminal deflection, J point at 0.3 x terminal deflection), the +250 degree angle and the QTc ramp are fitted to three exemplar tracings and general electrophysiology, not to published measurements',
   ],
   sources: [
     { title: 'LITFL ECG Library: Tricyclic Overdose (Sodium Channel Blocker Toxicity)', url: 'https://litfl.com/tricyclic-overdose-sodium-channel-blocker-toxicity/' },
     { title: 'LITFL CCC: ECG in Toxicology', url: 'https://litfl.com/ecg-in-toxicology/' },
+    { title: 'Boehnert MT, Lovejoy FH. Value of the QRS duration versus the serum drug level in predicting seizures and ventricular arrhythmias after an acute overdose of tricyclic antidepressants. N Engl J Med 1985', url: 'https://www.nejm.org/doi/full/10.1056/NEJM198508223130804' },
+    { title: 'Liebelt EL, Francis PD, Woolf AD. ECG lead aVR versus QRS interval in predicting seizures and arrhythmias in acute tricyclic antidepressant toxicity. Ann Emerg Med 1995', url: 'https://pubmed.ncbi.nlm.nih.gov/7618783/' },
+    { title: 'Wolfe TR, Caravati EM, Rollins DE. Terminal 40-ms frontal plane QRS axis as a marker for tricyclic antidepressant overdose. Ann Emerg Med 1989', url: 'https://www.sciencedirect.com/science/article/abs/pii/S0196064489805669' },
+    { title: 'Emergency Medicine Cases, ECG Cases 12: RBBB and occlusion MI (the appropriate-discordance rule used for the secondary T wave)', url: 'https://emergencymedicinecases.com/ecg-rbbb-occlusion-mi/' },
   ],
   checklist: [
     { label: 'Sinus tachycardia', measure: 'hr', threshold: 100, direction: 'above', meaning: 'M1 blockade' },
@@ -119,34 +126,62 @@ export const SODIUM_CHANNEL_BLOCKER: ToxSpec = {
   ],
 };
 
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+
 function sodiumChannelBlocker(s: number): ToxResult {
   const morph = cloneMorphology(NORMAL_MORPHOLOGY);
-  // Terminal rightward-superior vector in the frontal plane, magnitude grows with severity.
+  // Weight of the secondary repolarisation rule and of the sine-wave end state.
+  const w = clamp01(s / 0.6);
+  const sine = clamp01((s - 0.85) / 0.15);
+
+  // Terminal frontal vector: rightward and superior. Wolfe et al. (1989) report a
+  // terminal 40 ms frontal axis of 130 to 270 degrees in TCA poisoning; 250 is
+  // inside that range and reproduces a deep S in II, III and aVF with a
+  // dominant R' in aVR (the exemplar tracings). Magnitude grows with severity.
   const M = 0.75 * s;
-  const axisDeg = 200;
-  const rad = (axisDeg * Math.PI) / 180;
-  const vx = M * Math.cos(rad);
-  const vy = M * Math.sin(rad);
-  const proj = (lead: 'I' | 'II') => vx * LIMB_LEAD_VECTORS[lead][0] + vy * LIMB_LEAD_VECTORS[lead][1];
-  morph.I = { ...morph.I, s: morph.I.s + proj('I'), t: morph.I.t * (1 - 0.4 * s) };
-  morph.II = { ...morph.II, s: morph.II.s + proj('II'), t: morph.II.t * (1 - 0.4 * s) };
-  // Precordial: RBBB-like terminal R' in V1 to V2, broad S in V5 to V6.
-  morph.V1 = { ...morph.V1, rPrime: 0.55 * s, t: -0.1 - 0.15 * s };
-  morph.V2 = { ...morph.V2, rPrime: 0.35 * s, t: morph.V2.t * (1 - 0.5 * s) };
-  morph.V5 = { ...morph.V5, s: morph.V5.s - 0.35 * s, t: morph.V5.t * (1 - 0.4 * s) };
-  morph.V6 = { ...morph.V6, s: morph.V6.s - 0.45 * s, t: morph.V6.t * (1 - 0.4 * s) };
+  const axisDeg = 250;
+  const f = frontalTerminal(M, axisDeg);
+  morph.I = { ...morph.I, s: morph.I.s + f.I };
+  morph.II = { ...morph.II, s: morph.II.s + f.II };
+  // Precordial: tall broad R' in V1 to V2 (V2's own S shrinks as the R' grows), deep broad S from V3 to V6.
+  morph.V1 = { ...morph.V1, rPrime: 1.2 * s };
+  morph.V2 = { ...morph.V2, rPrime: 0.5 * s, s: morph.V2.s * (1 - 0.6 * s) };
+  morph.V3 = { ...morph.V3, s: morph.V3.s - 0.5 * s };
+  morph.V4 = { ...morph.V4, s: morph.V4.s - 0.7 * s };
+  morph.V5 = { ...morph.V5, s: morph.V5.s - 0.7 * s };
+  morph.V6 = { ...morph.V6, s: morph.V6.s - 0.7 * s };
+  // The initial r shrinks as the terminal forces grow (limb leads in the exemplars are a small
+  // narrow r before the broad S); toward the sine-wave end state it fades further so that the
+  // terminal deflection and the T wave become one oscillation.
+  const rScaleLimb = (1 - 0.6 * s) * (1 - 0.4 * sine);
+  const rScalePrecordial = (1 - 0.3 * s) * (1 - 0.4 * sine);
+  const termSharp = lerp(0.8, 1.2, s);
+  const tSharp = lerp(1.0, 1.6, s);
+  for (const lead of INDEPENDENT_LEADS) {
+    const m = morph[lead];
+    const rs = lead === 'I' || lead === 'II' ? rScaleLimb : rScalePrecordial;
+    morph[lead] = { ...m, terminalSharpness: termSharp, tSharpness: tSharp, r: m.r * rs, q: m.q * (1 - sine) };
+  }
+
+  // Secondary repolarisation: T opposite the terminal deflection, J on its return limb.
+  applySecondaryRepolarisation(morph, { k: lerp(0.8, 0.85, sine), c: lerp(0.3, 0.35, sine), tPeakFraction: 0.5, weight: w });
 
   const rate = lerp(95, 135, s);
-  const qrs = lerp(0.09, 0.18, s);
-  const qtc = lerp(0.41, 0.50, s);
+  const qrs = lerp(0.09, 0.19, s);
+  // QT lengthens mainly because the QRS does; JT is held roughly constant.
+  const qtc = lerp(0.42, 0.64, s);
   const pr = lerp(0.16, 0.20, s);
+  const rPeakFraction = Math.min(0.3, 0.03 / qrs);
+  const sPeakFraction = lerp(0.62, 0.45, s);
+  const rPrimePeakFraction = lerp(0.84, 0.72, s);
+  const stFraction = 0.3 * (1 - w);
   return {
     sinus: {
       rate,
       rrJitter: 0.02,
       qtc,
-      intervals: { pr, qrs, rPeakFraction: 0.33, sPeakFraction: 0.62, rPrimePeakFraction: 0.84 },
-      qtPartition: { stFraction: 0.3 },
+      intervals: { pr, qrs, rPeakFraction, sPeakFraction, rPrimePeakFraction },
+      qtPartition: { stFraction: Math.max(0.001, stFraction) },
       morphology: morph,
     },
     morphology: morph,
@@ -154,8 +189,10 @@ function sodiumChannelBlocker(s: number): ToxResult {
       'Heart rate': `${rate.toFixed(0)} bpm`,
       'QRS duration': `${(qrs * 1000).toFixed(0)} ms`,
       'Terminal QRS vector': `${M.toFixed(2)} mV at +${axisDeg}°`,
+      'Secondary repolarisation': `${(w * 100).toFixed(0)} % (T opposite terminal QRS, ST segment ${(stFraction * 100).toFixed(0)} % of JT)`,
       QTc: `${(qtc * 1000).toFixed(0)} ms`,
       PR: `${(pr * 1000).toFixed(0)} ms`,
+      ...(sine > 0 ? { 'Sine-wave fusion': `${(sine * 100).toFixed(0)} %` } : {}),
     },
   };
 }
@@ -172,7 +209,7 @@ export const DIGOXIN: ToxSpec = {
     'Na+/K+-ATPase inhibition raises intracellular calcium (increased automaticity) and enhances vagal tone at the AV node (decreased AV conduction). Shortened atrial and ventricular refractory periods shorten the QT and produce secondary repolarisation changes. Digoxin effect indicates the drug is present, not toxicity.',
   features: [
     "Downsloping ST depression with a 'reverse tick' or 'Salvador Dali sagging' appearance, most in leads with tall R waves; J-point depression",
-    'Flattened, inverted or biphasic T waves',
+    'Flattened, inverted or biphasic T waves (my-EKG: the sag swallows the initial T and leaves the "terminal portion of the pointed T wave" upright; drawn here as a terminal T that flattens and then inverts with severity)',
     'Shortened QT interval',
     'Mild PR prolongation (up to 240 ms, vagal)',
     'Prominent U waves',
@@ -188,6 +225,7 @@ export const DIGOXIN: ToxSpec = {
     { title: 'LITFL ECG Library: Digoxin Effect', url: 'https://litfl.com/digoxin-effect-ecg-library/' },
     { title: 'LITFL ECG Library: Digoxin Toxicity', url: 'https://litfl.com/digoxin-toxicity-ecg-library/' },
     { title: 'LITFL CCC: ECG in Toxicology', url: 'https://litfl.com/ecg-in-toxicology/' },
+    { title: 'my-EKG: Digoxin on the electrocardiogram', url: 'https://en.my-ekg.com/metabolic-drugs/digoxin-ekg.html' },
   ],
   checklist: [
     { label: 'ST scoop depth (V5) beyond 0.1 mV', measure: 'stScoop', threshold: 0.1, direction: 'above', meaning: 'digoxin effect' },
@@ -201,30 +239,38 @@ export const DIGOXIN: ToxSpec = {
 
 function digoxin(s: number): ToxResult {
   const morph = cloneMorphology(NORMAL_MORPHOLOGY);
-  const scoop = -(0.10 + 0.14 * s);
-  const tFactor = 1 - 1.5 * s; // upright -> flat -> inverted
-  const scooped: Array<keyof IndependentSet<LeadMorphology>> = ['I', 'II', 'V4', 'V5', 'V6'];
-  for (const l of scooped) {
+  // Digoxin effect in leads with a tall R: a slight J-point depression, a concave sag that reaches
+  // its nadir where the T would begin, and a T whose initial part is swallowed by the sag while its
+  // terminal part stays upright (the "reverse tick"; my-EKG: "terminal portion of the pointed T
+  // wave"). With severity the terminal T flattens and finally inverts.
+  const sagDepth = 0.06 + 0.14 * s; // ST level at the end of the sag, mV below baseline
+  const scoop = -(0.04 + 0.06 * s); // extra concavity inside the sag
+  const tTerminal = lerp(0.18, -0.12, s); // biphasic (terminal upright) -> flat -> inverted
+  const tallR: Array<keyof IndependentSet<LeadMorphology>> = ['I', 'II', 'V4', 'V5', 'V6'];
+  for (const l of tallR) {
     const base = morph[l];
+    const scale = base.r / 1.5; // sag scales with R height (LITFL: most in leads with tall R waves)
     morph[l] = {
       ...base,
-      stJ: -(0.03 + 0.05 * s),
-      stT: -(0.02 + 0.03 * s),
-      stShape: 0.7,
-      stScoop: scoop * (l === 'I' ? 0.7 : 1),
-      t: base.t * tFactor,
-      tSharpness: 0.9,
+      stJ: -(0.02 + 0.03 * s) * Math.max(0.5, scale),
+      stT: -sagDepth * Math.max(0.5, scale),
+      stShape: 0.6,
+      stScoop: scoop * Math.max(0.5, scale),
+      t: tTerminal * Math.max(0.5, scale),
+      tPeakFraction: 0.7,
+      tSharpness: 0.8,
       u: 0.05 + 0.06 * s,
     };
   }
-  morph.V3 = { ...morph.V3, stScoop: scoop * 0.4, t: morph.V3.t * (1 - 0.6 * s), u: 0.04 + 0.05 * s };
+  morph.V3 = { ...morph.V3, stJ: -0.02 * s, stT: -0.4 * sagDepth, stScoop: scoop * 0.5, t: morph.V3.t * (1 - 0.7 * s), tPeakFraction: 0.65, u: 0.04 + 0.05 * s };
   morph.V2 = { ...morph.V2, u: 0.04 + 0.05 * s };
 
   const rate = lerp(72, 42, s);
   const pr = lerp(0.16, 0.24, s);
   const qtc = lerp(0.40, 0.335, s);
   const ectopy: EctopyOptions | undefined = s >= 0.45 ? { every: s >= 0.8 ? 1 : 3, couplingFraction: 0.5 } : undefined;
-  const partition: QtPartition = { stFraction: lerp(0.32, 0.18, s) };
+  // Long sag, short T: the ST window carries the sag and the T window only the terminal deflection.
+  const partition: QtPartition = { stFraction: lerp(0.4, 0.5, s) };
   return {
     sinus: { rate, rrJitter: 0.02, qtc, intervals: { pr, uDuration: 0.16, uPeakFraction: 0.45 }, qtPartition: partition, ectopy, morphology: morph },
     morphology: morph,
@@ -232,8 +278,8 @@ function digoxin(s: number): ToxResult {
       'Heart rate': `${rate.toFixed(0)} bpm`,
       PR: `${(pr * 1000).toFixed(0)} ms`,
       QTc: `${(qtc * 1000).toFixed(0)} ms`,
-      'ST scoop (V5)': `${scoop.toFixed(2)} mV`,
-      'T amplitude factor': tFactor.toFixed(2),
+      'ST sag at T onset (V5)': `${(-sagDepth).toFixed(2)} mV`,
+      'Terminal T (V5)': `${tTerminal.toFixed(2)} mV`,
       'U amplitude (V5)': `${(0.05 + 0.06 * s).toFixed(2)} mV`,
       Ectopy: ectopy ? (ectopy.every === 1 ? 'bigeminy' : ectopy.every === 2 ? 'trigeminy' : `PVC after every ${ectopy.every} sinus beats`) : 'none',
     },
@@ -252,7 +298,7 @@ export const POTASSIUM_CHANNEL_BLOCKER: ToxSpec = {
     'Block of the rapid delayed rectifier (IKr, hERG) slows phase 3 repolarisation, prolonging the action potential and the QT interval. Early afterdepolarisations at long cycle lengths trigger torsades de pointes, so bradycardia raises the risk. LITFL: risk is assessed with the QT nomogram (absolute QT against heart rate).',
   features: [
     'Prolongation of the QT interval',
-    'Broad, low-amplitude T waves, often notched (LQT2-like morphology) and prominent U waves',
+    'Broad, low-amplitude T waves, often notched (LQT2-like morphology) and prominent U waves. Yan and Antzelevitch (1998, arterially perfused wedge) reproduced the broad-based, bifid T of IKr block as a transmural dispersion effect; Moss et al. (1995) describe LQT2 T waves as low-amplitude and bifid or notched',
     'Bradycardia increases the likelihood of torsades de pointes (sotalol adds beta blockade)',
     'QTc > 440 ms (men) or > 460 ms (women) is prolonged; QTc > 500 ms carries substantially higher arrhythmia risk',
   ],
@@ -264,6 +310,8 @@ export const POTASSIUM_CHANNEL_BLOCKER: ToxSpec = {
   sources: [
     { title: 'LITFL ECG Library: QT Interval', url: 'https://litfl.com/qt-interval-ecg-library/' },
     { title: 'LITFL CCC: ECG in Toxicology', url: 'https://litfl.com/ecg-in-toxicology/' },
+    { title: 'Yan GX, Antzelevitch C. Cellular basis for the normal T wave and the electrocardiographic manifestations of the long-QT syndrome. Circulation 1998 (wedge model: IKr block gives a broad-based, bifid T)', url: 'https://www.ahajournals.org/doi/10.1161/01.cir.98.18.1928' },
+    { title: 'Moss AJ et al. ECG T-wave patterns in genetically distinct forms of the hereditary long QT syndrome. Circulation 1995 (PubMed search link; the article itself was not fetched in this build)', url: 'https://pubmed.ncbi.nlm.nih.gov/?term=Moss+AJ+1995+ECG+T-wave+patterns+genetically+distinct+forms+hereditary+long+QT' },
   ],
   checklist: [
     { label: 'QTc > 440 ms', measure: 'qtc', threshold: 0.44, direction: 'above', meaning: 'prolonged (men)' },
@@ -276,28 +324,32 @@ export const POTASSIUM_CHANNEL_BLOCKER: ToxSpec = {
 
 function potassiumChannelBlocker(s: number): ToxResult {
   const morph = cloneMorphology(NORMAL_MORPHOLOGY);
+  // IKr block: the T wave becomes broad-based and low, with a late second hump (bifid or notched T)
+  // and a prominent U, the LQT2-like pattern. The T peak moves late and the wave flattens (sharpness
+  // above 1) rather than sharpening.
   const uAmp = 0.03 + 0.09 * s;
   for (const l of Object.keys(morph) as Array<keyof IndependentSet<LeadMorphology>>) {
     const base = morph[l];
     morph[l] = {
       ...base,
-      t: base.t * (1 - 0.5 * s),
-      tSharpness: lerp(1.0, 0.7, s),
-      tNotch: (base.t > 0 ? 1 : -1) * 0.07 * s,
-      tNotchFraction: 0.72,
+      t: base.t * (1 - 0.45 * s),
+      tSharpness: lerp(1.0, 1.4, s),
+      tPeakFraction: lerp(0.55, 0.42, s),
+      tNotch: (base.t > 0 ? 1 : -1) * 0.10 * s,
+      tNotchFraction: 0.76,
       u: uAmp * (base.t >= 0 ? 1 : 0.5),
     };
   }
   const rate = lerp(72, 50, s);
   const qtc = lerp(0.41, 0.57, s);
   return {
-    sinus: { rate, rrJitter: 0.02, qtc, intervals: { uDuration: 0.16 }, qtPartition: { stFraction: lerp(0.32, 0.22, s) }, morphology: morph },
+    sinus: { rate, rrJitter: 0.02, qtc, intervals: { uDuration: 0.16 }, qtPartition: { stFraction: lerp(0.32, 0.2, s) }, morphology: morph },
     morphology: morph,
     settings: {
       'Heart rate': `${rate.toFixed(0)} bpm`,
       QTc: `${(qtc * 1000).toFixed(0)} ms`,
-      'T amplitude factor': (1 - 0.5 * s).toFixed(2),
-      'T notch': `${(0.07 * s).toFixed(3)} mV`,
+      'T amplitude factor': (1 - 0.45 * s).toFixed(2),
+      'T second hump': `${(0.10 * s).toFixed(3)} mV`,
       'U amplitude': `${uAmp.toFixed(2)} mV`,
     },
   };
@@ -316,14 +368,16 @@ export const HYPERKALAEMIA: ToxSpec = {
   mechanism:
     'Raised extracellular potassium depolarises the resting membrane and accelerates repolarisation (tall narrow T), then inactivates sodium channels so atrial and ventricular conduction slow (P flattening and loss, PR and QRS widening), ending in a sine-wave rhythm. LITFL: ECG changes generally do not manifest until potassium is at least about 6.0 mmol/L, and serum potassium may not correlate closely with the ECG.',
   features: [
-    'The earliest manifestation is an increase in T wave amplitude: peaked T waves',
+    'The earliest manifestation is an increase in T wave amplitude: peaked T waves (Littmann and Gibbs 2018: the critical feature is "the narrowing down of the base of the T waves", not height alone; most prominent in V2 to V4)',
     'P wave widening and flattening, PR prolongation',
     'Bradyarrhythmias: sinus bradycardia, high-grade AV block with slow junctional and ventricular escape rhythms',
-    'Conduction blocks (bundle branch block, fascicular blocks); QRS widening with bizarre QRS morphology',
+    'Conduction blocks (bundle branch block, fascicular blocks); QRS widening with bizarre QRS morphology, drawn here as a narrow initial r with a broad slurred S that runs straight into the tall T',
+    'ST elevation in V1 and V2 with the wide QRS (Littmann and Gibbs 2018: "most frequently seen in the anterior chest leads, primarily in leads V1 and V2", often resembling a type 1 Brugada pattern)',
     'Severe (> 9.0 mmol/L): sine wave appearance (pre-terminal), ventricular fibrillation, PEA with bizarre wide complex rhythm, asystole',
   ],
   notModelled: [
-    'Bundle branch and fascicular block patterns as distinct morphologies (QRS widening here is uniform)',
+    'Bundle branch and fascicular block patterns as distinct morphologies (the widening here is one generic intraventricular conduction delay pattern)',
+    'Pseudo-infarction ST elevation outside V1 to V2, axis shift, and the wide-QRS PEA of the terminal phase',
     'High-grade AV block with escape (use the beta-blocker/CCB pattern for block, or the main tab)',
     'VF, PEA, asystole',
     'The stage labels map severity to approximate potassium bands; LITFL warns the correlation is loose',
@@ -331,6 +385,8 @@ export const HYPERKALAEMIA: ToxSpec = {
   sources: [
     { title: 'LITFL ECG Library: Hyperkalaemia', url: 'https://litfl.com/hyperkalaemia-ecg-library/' },
     { title: 'LITFL Toxicology Library: Hydrofluoric acid', url: 'https://litfl.com/hydrofluric-acid/' },
+    { title: 'Littmann L, Gibbs MA. Electrocardiographic manifestations of severe hyperkalemia. J Electrocardiol 2018', url: 'https://www.sciencedirect.com/science/article/abs/pii/S0022073618304473' },
+    { title: 'Mattu A, Brady WJ, Robinson DA. Electrocardiographic manifestations of hyperkalemia. Am J Emerg Med 2000', url: 'https://pubmed.ncbi.nlm.nih.gov/11043630/' },
   ],
   checklist: [
     { label: 'Tall T in V3 (> 0.8 mV here; LITFL gives no numeric cut-off)', measure: 'tAmpV3', threshold: 0.8, direction: 'above', meaning: 'earliest sign' },
@@ -343,44 +399,79 @@ export const HYPERKALAEMIA: ToxSpec = {
 
 function hyperkalaemia(s: number): ToxResult {
   const morph = cloneMorphology(NORMAL_MORPHOLOGY);
-  // Stage weights (smooth ramps): peaked T from the start; P loss and PR from 0.3; QRS from 0.55; sine wave from 0.85.
+  // Stage weights (smooth ramps): peaked T from the start; P loss and PR from 0.3; QRS from 0.5; sine wave from 0.85.
   const ramp = (a: number, b: number) => Math.max(0, Math.min(1, (s - a) / (b - a)));
   const wT = Math.min(1, s / 0.5);
   const wP = ramp(0.3, 0.75);
-  const wQ = ramp(0.55, 1.0);
+  const wQ = ramp(0.5, 0.9);
   const wSine = ramp(0.85, 1.0);
-  for (const l of Object.keys(morph) as Array<keyof IndependentSet<LeadMorphology>>) {
+  const qrs = lerp(0.09, 0.22, wQ);
+  for (const l of INDEPENDENT_LEADS) {
     const base = morph[l];
     const tSign = base.t >= 0 ? 1 : -1;
     const tBase = Math.abs(base.t);
-    // Peaked T: taller and narrower (sharpness up), symmetric. At the sine-wave stage the T broadens again and fuses with the QRS.
-    const tAmp = tSign * (tBase * (1 + 2.2 * wT) + 0.25 * wT) * (1 - 0.25 * wSine);
+    // Peaked T: taller, symmetric, with a narrow base (Littmann and Gibbs 2018: "the narrowing down of
+    // the base of the T waves" is the critical feature). Most prominent in V2 to V4. Toward the sine
+    // wave the T broadens again and fuses with the terminal QRS deflection.
+    const precordialBoost = l === 'V2' || l === 'V3' || l === 'V4' ? 1.2 : 1;
+    let t = tSign * (tBase * (1 + 1.6 * wT * precordialBoost) + 0.2 * wT) * (1 - 0.2 * wSine);
+    // Terminal QRS widening with an intraventricular conduction delay pattern: broad S in the
+    // lateral and inferior leads (I, II, V4 to V6), broad terminal S in V1 to V3 with ST elevation
+    // in V1 and V2 (Littmann and Gibbs: most frequently V1 and V2, often resembling a type 1
+    // Brugada pattern). The initial r stays narrow and fades toward the sine wave.
+    let sAmp = base.s;
+    let stJ = 0;
+    if (l === 'V1' || l === 'V2') {
+      sAmp = base.s * (1 + 0.4 * wQ);
+      stJ = (l === 'V1' ? 0.25 : 0.2) * wQ;
+      if (l === 'V1') t = lerp(t, -0.35, wQ); // coved ST with a negative T in V1 at the Brugada-like stage
+    } else if (l === 'V3') {
+      sAmp = base.s * (1 + 0.5 * wQ);
+    } else {
+      sAmp = base.s - 0.7 * wQ; // lateral and inferior leads: deep broad S
+    }
+    // J point on the return limb of the terminal S (no flat ST once the QRS is wide), and the tall T
+    // rising from there. In V1 and V2 the J offset is the ST elevation instead.
+    const c = 0.3 * wQ;
+    const jLevel = stJ !== 0 ? stJ : c * sAmp;
     morph[l] = {
       ...base,
       p: base.p * (1 - 0.95 * wP),
-      t: tAmp,
-      tSharpness: lerp(1.0, 2.0, wT) * (1 - 0.5 * wSine),
+      t,
+      tSharpness: lerp(1.0, 2.5, wT) * (1 - 0.5 * wSine),
       tPeakFraction: lerp(0.55, 0.5, wT),
-      qrsSharpness: lerp(0.8, 1.6, wSine),
-      r: base.r * (1 + 0.3 * wQ),
-      s: base.s * (1 + 0.5 * wQ),
+      r: base.r * (1 - 0.35 * wQ) * (1 - 0.4 * wSine),
+      q: base.q * (1 - wSine),
+      s: sAmp,
+      stJ: jLevel,
+      stT: jLevel,
+      terminalSharpness: lerp(0.8, 1.2, wQ),
     };
   }
   const rate = lerp(72, 38, ramp(0.3, 1.0));
   const pr = lerp(0.16, 0.30, wP);
-  const qrs = lerp(0.09, 0.24, wQ);
-  const qtc = lerp(0.40, 0.44, wQ);
+  // QT: slightly shorter early (accelerated repolarisation), then longer only because the QRS widens.
+  const qtc = lerp(0.40, 0.36, wT) + 0.16 * wQ;
   const hasP = wP < 0.9;
-  const stFraction = lerp(0.32, 0.05, Math.max(wQ, wSine));
+  // Narrow-based T: a modest ST share keeps the T window short while the T is tall; the share goes to
+  // zero as the QRS widens so the S runs straight into the T.
+  const stFraction = lerp(0.32, 0.25, wT) * (1 - wQ);
   const stage =
-    s < 0.3 ? 'about 5.5 to 6.5 mmol/L: peaked T' : s < 0.55 ? 'about 6.5 to 7.5: P flattening, PR prolongation' : s < 0.85 ? 'about 7 to 9: QRS widening, P loss, bradycardia' : 'above 9: sine wave (pre-terminal)';
+    s < 0.3 ? 'about 5.5 to 6.5 mmol/L: peaked T' : s < 0.5 ? 'about 6.5 to 7.5: P flattening, PR prolongation' : s < 0.85 ? 'about 7 to 9: QRS widening, P loss, bradycardia' : 'above 9: sine wave (pre-terminal)';
   return {
     sinus: {
       rate,
       rrJitter: 0.02,
       qtc,
-      intervals: { pr, qrs, hasP, pDuration: lerp(0.09, 0.13, wP), sPeakFraction: lerp(0.72, 0.6, wSine) },
-      qtPartition: { stFraction, minT: 0.12 },
+      intervals: {
+        pr,
+        qrs,
+        hasP,
+        pDuration: lerp(0.09, 0.13, wP),
+        rPeakFraction: Math.min(0.4, 0.035 / qrs),
+        sPeakFraction: lerp(0.72, 0.5, wQ),
+      },
+      qtPartition: { stFraction: Math.max(0.001, stFraction), minT: 0.12 },
       morphology: morph,
     },
     morphology: morph,
@@ -392,6 +483,8 @@ function hyperkalaemia(s: number): ToxResult {
       'P amplitude II': hasP ? `${morph.II.p.toFixed(3)} mV` : 'absent',
       PR: `${(pr * 1000).toFixed(0)} ms`,
       'QRS duration': `${(qrs * 1000).toFixed(0)} ms`,
+      'ST elevation V1': `${morph.V1.stJ?.toFixed(2) ?? '0.00'} mV`,
+      'ST share of JT': stFraction.toFixed(2),
     },
   };
 }

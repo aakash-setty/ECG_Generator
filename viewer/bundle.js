@@ -77,6 +77,7 @@
     const out = [];
     const pS = m.pSharpness ?? 1;
     const qrsS = m.qrsSharpness ?? 0.8;
+    const termS = m.terminalSharpness ?? qrsS;
     const tS = m.tSharpness ?? 1;
     if (lm.pOn !== null && lm.pPeak !== null && lm.pOff !== null && m.p !== 0) {
       out.push(bump({ on: lm.pOn, peak: lm.pPeak, off: lm.pOff, amplitude: m.p, sharpness: pS }));
@@ -85,8 +86,10 @@
     const hasQ = m.q !== 0;
     const hasR = m.r !== 0;
     const hasS = m.s !== 0;
+    const hasRPrime = (m.rPrime ?? 0) !== 0;
+    const last = hasRPrime ? "rp" : hasS ? "s" : hasR ? "r" : hasQ ? "q" : null;
     if (hasQ) {
-      out.push(bump({ on: lm.qrsOn, peak: lm.qPeak, off: hasR ? lm.rPeak : hasS ? lm.sPeak : lm.j, amplitude: m.q, sharpness: qrsS }));
+      out.push(bump({ on: lm.qrsOn, peak: lm.qPeak, off: hasR ? lm.rPeak : hasS ? lm.sPeak : lm.j, amplitude: m.q, sharpness: last === "q" ? termS : qrsS }));
     }
     if (hasR) {
       out.push(
@@ -95,16 +98,15 @@
           peak: lm.rPeak,
           off: hasS ? lm.sPeak : lm.j,
           amplitude: m.r,
-          sharpness: qrsS
+          sharpness: last === "r" ? termS : qrsS
         })
       );
     }
-    const hasRPrime = (m.rPrime ?? 0) !== 0;
     if (hasS) {
-      out.push(bump({ on: hasR ? lm.rPeak : hasQ ? lm.qPeak : lm.qrsOn, peak: lm.sPeak, off: hasRPrime ? lm.rPrimePeak : lm.j, amplitude: m.s, sharpness: qrsS }));
+      out.push(bump({ on: hasR ? lm.rPeak : hasQ ? lm.qPeak : lm.qrsOn, peak: lm.sPeak, off: hasRPrime ? lm.rPrimePeak : lm.j, amplitude: m.s, sharpness: last === "s" ? termS : qrsS }));
     }
     if (hasRPrime) {
-      out.push(bump({ on: hasS ? lm.sPeak : hasR ? lm.rPeak : hasQ ? lm.qPeak : lm.qrsOn, peak: lm.rPrimePeak, off: lm.j, amplitude: m.rPrime, sharpness: qrsS }));
+      out.push(bump({ on: hasS ? lm.sPeak : hasR ? lm.rPeak : hasQ ? lm.qPeak : lm.qrsOn, peak: lm.rPrimePeak, off: lm.j, amplitude: m.rPrime, sharpness: termS }));
     }
     const stJ = m.stJ ?? 0;
     const stT = m.stT ?? stJ;
@@ -886,7 +888,7 @@
     const tMin = opts.tMinAmplitude ?? 0.03;
     const slopeFrac = opts.qrsSlopeFraction ?? 0.3;
     const endSlopeFrac = opts.qrsEndSlopeFraction ?? 0.02;
-    const refractory = Math.round((opts.refractory ?? 0.2) * fs);
+    const refractory = Math.round((opts.refractory ?? 0.15) * fs);
     const n = v.length;
     const b = estimateBaseline(v, ampThr);
     const d = derivative(v, fs);
@@ -924,12 +926,22 @@
       return (r - l) / fs;
     };
     const widths = detections.map(halfWidth);
+    const peakSlope = (pk, w) => {
+      const h = Math.round(w * fs);
+      let m = 0;
+      for (let q = Math.max(0, pk - h); q <= Math.min(n - 1, pk + Math.round(0.25 * h)); q++) m = Math.max(m, Math.abs(d[q] ?? 0));
+      return m;
+    };
+    const slopes = detections.map((pk, idx) => peakSlope(pk, widths[idx]));
     const keep = detections.filter((pk, idx) => {
       const w = widths[idx];
       for (let j = 0; j < detections.length; j++) {
         if (j === idx) continue;
         const near = Math.abs(detections[j] - pk) / fs < 0.5;
-        if (near && widths[j] < 0.06 && w > 2.2 * widths[j]) return false;
+        if (!near) continue;
+        if (widths[j] < 0.06 && w > 2.2 * widths[j]) return false;
+        if (w >= 0.06 && widths[j] >= 0.06 && slopes[idx] < 0.7 * slopes[j]) return false;
+        if (slopes[idx] < 0.5 * slopes[j] && w >= widths[j]) return false;
       }
       return true;
     });
@@ -979,6 +991,47 @@
           }
         }
         if (back >= 0) jIdx = Math.max(pk, back - 1);
+      }
+      {
+        const lim = Math.min(n - 1, jIdx + Math.round(0.1 * fs));
+        let q = jIdx;
+        let dev = Math.abs((v[q] ?? 0) - b);
+        if (dev >= 4 * ampThr) {
+          const extremumLim = Math.min(lim, q + Math.round(0.015 * fs));
+          while (q < extremumLim && Math.abs((v[q + 1] ?? 0) - b) > dev + 1e-12) {
+            q++;
+            dev = Math.abs((v[q] ?? 0) - b);
+          }
+          const back = Math.max(0, q - Math.round(0.01 * fs));
+          const grew = Math.abs((v[back] ?? 0) - b) < dev - ampThr;
+          let maxStep = 0;
+          let minStep = Infinity;
+          let minAt = q;
+          let pastPeak = false;
+          while (grew && q < lim) {
+            const next = Math.abs((v[q + 1] ?? 0) - b);
+            if (next >= dev) break;
+            const step = dev - next;
+            if (!pastPeak) {
+              if (step >= maxStep) maxStep = step;
+              else pastPeak = true;
+            }
+            if (pastPeak) {
+              if (step < minStep) {
+                minStep = step;
+                minAt = q;
+              } else if (minStep < 0.6 * maxStep && step > 1.25 * minStep + 1e-9) {
+                q = minAt;
+                dev = Math.abs((v[q] ?? 0) - b);
+                break;
+              }
+            }
+            q++;
+            dev = next;
+            if (dev < ampThr) break;
+          }
+          if (q > jIdx && maxStep * fs >= 1.5 * (opts.qrsEndSlopeFloor ?? 3)) jIdx = q;
+        }
       }
       let rAmp = 0;
       let sAmp = 0;

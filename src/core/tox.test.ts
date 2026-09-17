@@ -115,3 +115,27 @@ test('hypocalcaemia: QTc rises through ST prolongation while T peak-to-end stays
   assert.ok(Math.abs((hi.tpe as number) - (lo.tpe as number)) < 0.03, `Tpe ${lo.tpe} -> ${hi.tpe}`);
   assert.ok((hi.tpe as number) < 0.11);
 });
+
+test('hyperkalaemia at 0.9: S runs into the T with no flat ST, V1 carries ST elevation with a negative T, initial r stays narrow', () => {
+  const r = applyToxidrome('hyperkalaemia', 0.9);
+  const strip = renderStrip(sinusRhythm({ ...r.sinus, duration: 6, seed: 3 }), 6);
+  const g = strip.beats[2]!.landmarks;
+  assert.ok(g.tOn - g.j < 0.02, `ST ${g.tOn - g.j}`);
+  assert.ok((r.morphology.V1.stJ ?? 0) > 0.05 && r.morphology.V1.t < 0, 'V1');
+  assert.ok(r.morphology.II.t > 0.8 && r.morphology.II.s < -0.4, 'II tall T, deep S');
+  assert.ok(g.rPeak - g.qrsOn < 0.045, 'narrow initial r');
+});
+
+test('digoxin: terminal T upright at low severity, inverted at full severity; sag deepens', () => {
+  const lo = applyToxidrome('digoxin', 0.1);
+  const hi = applyToxidrome('digoxin', 1);
+  assert.ok(lo.morphology.V5.t > 0 && hi.morphology.V5.t < 0);
+  assert.ok((hi.morphology.V5.stT as number) < (lo.morphology.V5.stT as number));
+});
+
+test('potassium channel blocker: T flattens and broadens (sharpness above 1) with a late second hump', () => {
+  const hi = applyToxidrome('potassium-channel-blocker', 1);
+  assert.ok((hi.morphology.II.tSharpness as number) > 1.2);
+  assert.ok((hi.morphology.II.tNotch as number) > 0.05);
+  assert.ok(hi.morphology.II.t < 0.6 * 0.35 + 1e-9);
+});

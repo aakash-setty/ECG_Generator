@@ -33,7 +33,7 @@ export interface DelineatorOptions {
   qrsEndSlopeFloor?: number;
   /** Cap on the QRS-end slope threshold, mV/s. Default 8. The threshold is min(cap, 0.1 * max slope), never below the floor. */
   qrsEndSlopeCap?: number;
-  /** Refractory period after a QRS detection, s. Default 0.20. */
+  /** Refractory period after a QRS detection, s. Default 0.15. */
   refractory?: number;
 }
 
@@ -146,7 +146,7 @@ export function delineate(v: Float64Array, fs: number, opts: DelineatorOptions =
   const tMin = opts.tMinAmplitude ?? 0.03;
   const slopeFrac = opts.qrsSlopeFraction ?? 0.3;
   const endSlopeFrac = opts.qrsEndSlopeFraction ?? 0.02;
-  const refractory = Math.round((opts.refractory ?? 0.2) * fs);
+  const refractory = Math.round((opts.refractory ?? 0.15) * fs);
 
   const n = v.length;
   const b = estimateBaseline(v, ampThr);
@@ -195,14 +195,33 @@ export function delineate(v: Float64Array, fs: number, opts: DelineatorOptions =
     return (r - l) / fs;
   };
   const widths = detections.map(halfWidth);
+  // Steepest slope on the approach to the peak (one half-width before it to a quarter after).
+  // Depolarisation is faster than repolarisation even when both are broad (sine-wave
+  // patterns), so among two broad candidates close together the slower one is the T wave.
+  const peakSlope = (pk: number, w: number): number => {
+    const h = Math.round(w * fs);
+    let m = 0;
+    for (let q = Math.max(0, pk - h); q <= Math.min(n - 1, pk + Math.round(0.25 * h)); q++) m = Math.max(m, Math.abs(d[q] ?? 0));
+    return m;
+  };
+  const slopes = detections.map((pk, idx) => peakSlope(pk, widths[idx]!));
   const keep = detections.filter((pk, idx) => {
     const w = widths[idx]!;
     for (let j = 0; j < detections.length; j++) {
       if (j === idx) continue;
       const near = Math.abs(detections[j]! - pk) / fs < 0.5;
+      if (!near) continue;
       // T-like: at least twice as wide at half amplitude as a nearby narrow candidate, and that
       // candidate is itself QRS-like (under 60 ms).
-      if (near && widths[j]! < 0.06 && w > 2.2 * widths[j]!) return false;
+      if (widths[j]! < 0.06 && w > 2.2 * widths[j]!) return false;
+      // Both broad: keep the steeper one when the slopes differ clearly.
+      if (w >= 0.06 && widths[j]! >= 0.06 && slopes[idx]! < 0.7 * slopes[j]!) return false;
+      // Any pair: a candidate that is both slower (under half the neighbour's approach slope) and
+      // no narrower than the neighbour is repolarisation: a tall peaked T rises at a fraction of
+      // the QRS rate even when its half-width is QRS-like. A PVC beside a sinus beat is broader but
+      // keeps well over half the sinus slope, so it survives; a small QRS beside a giant T is
+      // slower but narrower, so it survives too.
+      if (slopes[idx]! < 0.5 * slopes[j]! && w >= widths[j]!) return false;
     }
     return true;
   });
@@ -261,6 +280,63 @@ export function delineate(v: Float64Array, fs: number, opts: DelineatorOptions =
         }
       }
       if (back >= 0) jIdx = Math.max(pk, back - 1);
+    }
+    {
+      // Slurred terminal deflection (conduction delay, sodium channel blockade): the slope fell
+      // under the threshold while the signal is still well off baseline and heading back toward
+      // it. Follow the return limb, within 100 ms. The J point is where the return limb's slope
+      // reaches its minimum: at the baseline, at the start of a level ST shift, or at the knee
+      // where a smooth terminal deflection hands over to a straight upsloping ST segment or a
+      // fused T wave. A limb moving away from baseline, or one slower than the QRS-end slope
+      // floor (a downsloping ST segment, a flutter wave), is an ST shift, not a slurred S, and is left to the
+      // slope-based estimate. Known limit: a downsloping ST steeper than that floor would be read
+      // as slurred QRS.
+      const lim = Math.min(n - 1, jIdx + Math.round(0.1 * fs));
+      let q = jIdx;
+      let dev = Math.abs((v[q] ?? 0) - b);
+      if (dev >= 4 * ampThr) {
+        // The slope-based estimate can sit a sample or two before the terminal extremum; step onto it.
+        const extremumLim = Math.min(lim, q + Math.round(0.015 * fs));
+        while (q < extremumLim && Math.abs((v[q + 1] ?? 0) - b) > dev + 1e-12) {
+          q++;
+          dev = Math.abs((v[q] ?? 0) - b);
+        }
+        // The start must be an extremum the QRS drove the signal to (|v - b| was still growing
+        // 10 ms earlier). A J point reached on the way back to baseline, with an offset left by
+        // a flutter wave or an ST shift, is not the start of a slurred limb.
+        const back = Math.max(0, q - Math.round(0.01 * fs));
+        const grew = Math.abs((v[back] ?? 0) - b) < dev - ampThr;
+        let maxStep = 0;
+        let minStep = Infinity;
+        let minAt = q;
+        let pastPeak = false;
+        while (grew && q < lim) {
+          const next = Math.abs((v[q + 1] ?? 0) - b);
+          if (next >= dev) break;
+          const step = dev - next;
+          if (!pastPeak) {
+            if (step >= maxStep) maxStep = step;
+            else pastPeak = true;
+          }
+          if (pastPeak) {
+            // Past the steepest part of the return limb: the slope minimum is the J point.
+            if (step < minStep) {
+              minStep = step;
+              minAt = q;
+            } else if (minStep < 0.6 * maxStep && step > 1.25 * minStep + 1e-9) {
+              q = minAt;
+              dev = Math.abs((v[q] ?? 0) - b);
+              break;
+            }
+          }
+          q++;
+          dev = next;
+          if (dev < ampThr) break;
+        }
+        // Accept only a QRS-speed return limb: an ST segment drifting toward baseline at
+        // under the QRS-end slope floor is repolarisation, not a slurred terminal deflection.
+        if (q > jIdx && maxStep * fs >= 1.5 * (opts.qrsEndSlopeFloor ?? 3)) jIdx = q;
+      }
     }
 
     // R and S amplitudes inside [onIdx, jIdx].
